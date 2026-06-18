@@ -28,7 +28,8 @@
 #ifndef MTXLIB_FILE
 #define MTXLIB_FILE
 
-#include "System_Types.h"
+#include <stdint.h>
+#include <stddef.h>
 #include <math.h>
 #include <stdlib.h>
 /*---------------------------------------------*/
