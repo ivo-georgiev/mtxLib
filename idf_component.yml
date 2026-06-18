@@ -1,0 +1,11 @@
+version: "1.0.0"
+description: "Generic highly-optimized Matrix math library (Cholesky decomposition, inversion, multiplication) for embedded systems and tracking algorithms."
+url: "https://github.com"
+maintainers:
+  - "Ivo Georgiev"
+license: "MIT"
+targets:
+  - esp32
+  - esp32s2
+  - esp32s3
+  - esp32c3
