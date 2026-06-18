@@ -12,7 +12,7 @@ endif()
 include_directories(..)
 
 # Executable targets
-add_executable(matrix_test ukfTest.c ../mtxLib.c)
+add_executable(matrix_test mtxTest.c ../mtxLib.c)
 target_link_libraries(matrix_test m)
 
 enable_testing()

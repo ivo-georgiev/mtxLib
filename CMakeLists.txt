@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 
-# Проверка за ESP32 среда
+# ESP32 enviroment
 if(IDF_TARGET)
     idf_component_register(
         SRCS "mtxLib.c"
         INCLUDE_DIRS "."
     )
 else()
-    # Общ случай за Linux/Ubuntu/Windows
+    # Generic build Linux/Ubuntu/Windows
     project(mtxLib C)
     add_library(mtxLib STATIC mtxLib.c)
     target_include_directories(mtxLib PUBLIC .)
