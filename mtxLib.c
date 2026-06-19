@@ -349,7 +349,6 @@ enum mtxResultInfo mtx_chol1(double *A, double *L, const int size)
  *   - Epsilon-based zero detection
  *   - Input/output validation and consistency checks
  *   - Automatic initialization of destination as identity matrix
- *   - Condition number warning for ill-conditioned matrices
  * @param pSrc Source matrix (square, N×N). Modified in-place during computation if successful.
  *             On failure, source is unchanged (early detection before modifications).
  * @param pDst Destination matrix (output inverse). Automatically initialized as identity matrix.
@@ -358,21 +357,16 @@ enum mtxResultInfo mtx_chol1(double *A, double *L, const int size)
  *         MTX_SINGULAR if matrix is singular (det ≈ 0)
  *         MTX_NOT_SQUARE if matrix is not square
  *         MTX_SIZE_MISMATCH if src/dst dimensions don't match
- *         MTX_OPERATION_ERROR if NULL pointers or invalid values
+ *         MTX_OPERATION_ERROR if NULL pointers, invalid values, or numerical catastrophe
  * @pre pSrc->nrow == pSrc->ncol (enforced)
  * @pre pSrc->nrow == pDst->nrow && pSrc->ncol == pDst->ncol (enforced)
  * @pre pDst->val has valid allocated storage (required)
  * @pre All elements in pSrc are finite real numbers (checked)
- * @note Uses absolute epsilon threshold relative to matrix norm for robust singularity detection
+ * @note Uses epsilon threshold relative to matrix norm for robust singularity detection
  * @note Singularity is detected in pre-validation pass; source unchanged if detected
- * @note Condition number heuristic: if max_pivot/min_pivot > 1e8, matrix is ill-conditioned
  */
 enum mtxResultInfo mtx_inv(Matrix_t *const pSrc, Matrix_t *const pDst)
 {
-	enum mtxResultInfo result = MTX_OPERATION_OK;
-	
-	/* ===== INPUT VALIDATION ===== */
-	
 	/* Check NULL pointers */
 	if (NULL == pSrc || NULL == pDst || NULL == pSrc->val || NULL == pDst->val)
 	{
@@ -441,8 +435,6 @@ enum mtxResultInfo mtx_inv(Matrix_t *const pSrc, Matrix_t *const pDst)
 	/* ===== PRE-VALIDATION PASS: CHECK ALL PIVOTS BEFORE ANY MODIFICATIONS ===== */
 	/* This ensures singularity is detected before corrupting the source matrix */
 	
-	double max_pivot = 0.0;
-	double min_pivot = 1e16;
 	int pivot_row_array[matrix_size];  /* Store pivot rows for elimination phase */
 	
 	for (int pivot_col = 0; pivot_col < matrix_size; pivot_col++)
@@ -466,16 +458,6 @@ enum mtxResultInfo mtx_inv(Matrix_t *const pSrc, Matrix_t *const pDst)
 		{
 			/* Matrix is singular - return BEFORE any modifications */
 			return MTX_SINGULAR;
-		}
-		
-		/* Track pivot magnitudes for condition number heuristic */
-		if (max_pivot_val > max_pivot)
-		{
-			max_pivot = max_pivot_val;
-		}
-		if (max_pivot_val < min_pivot)
-		{
-			min_pivot = max_pivot_val;
 		}
 		
 		/* Store the pivot row for this column for use in elimination phase */
@@ -548,16 +530,7 @@ enum mtxResultInfo mtx_inv(Matrix_t *const pSrc, Matrix_t *const pDst)
 		}
 	}
 	
-	/* Heuristic condition number check: warn if very ill-conditioned */
-	/* Condition number ≈ max_pivot / min_pivot */
-	if (min_pivot > 1e-16 && (max_pivot / min_pivot) > 1e8)
-	{
-		/* Matrix is ill-conditioned but inversion completed */
-		/* Result may have low accuracy - no error returned but computation succeeded */
-		result = MTX_OPERATION_OK;
-	}
-	
-	return result;
+	return MTX_OPERATION_OK;
 }
 enum mtxResultInfo mtx_add(Matrix_t *const pDst, Matrix_t const *const pSrc)
 {
