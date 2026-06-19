@@ -532,6 +532,187 @@ enum mtxResultInfo mtx_inv(Matrix_t *const pSrc, Matrix_t *const pDst)
 	
 	return MTX_OPERATION_OK;
 }
+
+/**
+ * @brief Compute matrix inverse using LU decomposition with partial pivoting
+ * @details Implements inversion via:
+ *   - LU decomposition with partial pivoting (compact form)
+ *   - Forward substitution to solve L*Y = P*I
+ *   - Backward substitution to solve U*X = Y
+ *   - Superior for multiple inversions or determinant computation
+ * @param pSrc Source matrix (square, N×N). Modified to store LU decomposition.
+ *             On failure, source is unchanged (early detection before modifications).
+ * @param pDst Destination matrix (output inverse). Automatically initialized as identity matrix.
+ *             On success, contains inverse.
+ * @return MTX_OPERATION_OK if inversion successful
+ *         MTX_SINGULAR if matrix is singular
+ *         MTX_NOT_SQUARE if matrix is not square
+ *         MTX_SIZE_MISMATCH if src/dst dimensions don't match
+ *         MTX_OPERATION_ERROR if NULL pointers or invalid values
+ * @note LU method: better for ill-conditioned matrices and multiple operations
+ * @note Stores L (unit lower) + U (upper) in pSrc; permutation implicit in operations
+ */
+enum mtxResultInfo mtx_inv_lu(Matrix_t *const pSrc, Matrix_t *const pDst)
+{
+	/* Input validation */
+	if (NULL == pSrc || NULL == pDst || NULL == pSrc->val || NULL == pDst->val)
+	{
+		return MTX_OPERATION_ERROR;
+	}
+	
+	const int n = pSrc->nrow;
+	
+	if (n != pSrc->ncol || n != pDst->nrow || n != pDst->ncol)
+	{
+		return (n != pSrc->ncol) ? MTX_NOT_SQUARE : MTX_SIZE_MISMATCH;
+	}
+	
+	if (n < 1)
+	{
+		return MTX_OPERATION_ERROR;
+	}
+	
+	/* Check for special/invalid values */
+	for (int elem_idx = 0; elem_idx < pSrc->nelem; elem_idx++)
+	{
+		if (!isfinite(pSrc->val[elem_idx]))
+		{
+			return MTX_OPERATION_ERROR;
+		}
+	}
+	
+	/* Initialize destination as identity */
+	for (int i = 0; i < n; i++)
+	{
+		for (int j = 0; j < n; j++)
+		{
+			pDst->val[n * i + j] = (i == j) ? 1.0 : 0.0;
+		}
+	}
+	
+	/* Compute matrix norm for epsilon threshold */
+	double matrix_norm = 0.0;
+	for (int elem_idx = 0; elem_idx < pSrc->nelem; elem_idx++)
+	{
+		double abs_val = fabs(pSrc->val[elem_idx]);
+		if (abs_val > matrix_norm)
+		{
+			matrix_norm = abs_val;
+		}
+	}
+	
+	const double EPSILON_BASE = 1e-14;
+	const double epsilon_threshold = (matrix_norm > 1.0) ? EPSILON_BASE * matrix_norm : EPSILON_BASE;
+	
+	/* Permutation vector: implicit row exchanges */
+	int perm[n];
+	for (int i = 0; i < n; i++) perm[i] = i;
+	
+	/* ===== LU DECOMPOSITION WITH PARTIAL PIVOTING ===== */
+	
+	for (int k = 0; k < n; k++)
+	{
+		/* Find pivot */
+		int pivot_row = k;
+		double max_pivot = fabs(pSrc->val[n * k + k]);
+		
+		for (int i = k + 1; i < n; i++)
+		{
+			double abs_val = fabs(pSrc->val[n * i + k]);
+			if (abs_val > max_pivot)
+			{
+				max_pivot = abs_val;
+				pivot_row = i;
+			}
+		}
+		
+		/* Check singularity */
+		if (max_pivot < epsilon_threshold)
+		{
+			return MTX_SINGULAR;
+		}
+		
+		/* Swap rows in A and record permutation */
+		if (pivot_row != k)
+		{
+			for (int j = k; j < n; j++)
+			{
+				double temp = pSrc->val[n * k + j];
+				pSrc->val[n * k + j] = pSrc->val[n * pivot_row + j];
+				pSrc->val[n * pivot_row + j] = temp;
+			}
+			
+			/* Also swap in destination (inverse) */
+			for (int j = 0; j < n; j++)
+			{
+				double temp = pDst->val[n * k + j];
+				pDst->val[n * k + j] = pDst->val[n * pivot_row + j];
+				pDst->val[n * pivot_row + j] = temp;
+			}
+			
+			/* Record permutation */
+			int temp_perm = perm[k];
+			perm[k] = perm[pivot_row];
+			perm[pivot_row] = temp_perm;
+		}
+		
+		/* Scale pivot column for L */
+		double pivot_val = pSrc->val[n * k + k];
+		for (int i = k + 1; i < n; i++)
+		{
+			pSrc->val[n * i + k] /= pivot_val;
+		}
+		
+		/* Eliminate below pivot */
+		for (int i = k + 1; i < n; i++)
+		{
+			double factor = pSrc->val[n * i + k];
+			for (int j = k + 1; j < n; j++)
+			{
+				pSrc->val[n * i + j] -= factor * pSrc->val[n * k + j];
+			}
+		}
+	}
+	
+	/* ===== SOLVE LU*X = I FOR INVERSE (COLUMN BY COLUMN) ===== */
+	
+	for (int col = 0; col < n; col++)
+	{
+		/* Forward substitution: L*Y = e_col */
+		double y[n];
+		for (int i = 0; i < n; i++)
+		{
+			y[i] = pDst->val[n * i + col];  /* Already has permuted identity */
+			for (int j = 0; j < i; j++)
+			{
+				y[i] -= pSrc->val[n * i + j] * y[j];
+			}
+		}
+		
+		/* Back substitution: U*X = Y */
+		for (int i = n - 1; i >= 0; i--)
+		{
+			double sum = y[i];
+			for (int j = i + 1; j < n; j++)
+			{
+				sum -= pSrc->val[n * i + j] * pDst->val[n * j + col];
+			}
+			pDst->val[n * i + col] = sum / pSrc->val[n * i + i];
+		}
+	}
+	
+	/* Verify result is finite */
+	for (int elem_idx = 0; elem_idx < pDst->nelem; elem_idx++)
+	{
+		if (!isfinite(pDst->val[elem_idx]))
+		{
+			return MTX_OPERATION_ERROR;
+		}
+	}
+	
+	return MTX_OPERATION_OK;
+}
+
 enum mtxResultInfo mtx_add(Matrix_t *const pDst, Matrix_t const *const pSrc)
 {
 	int Result = MTX_OPERATION_OK;

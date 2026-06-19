@@ -75,6 +75,7 @@ extern enum mtxResultInfo mtx_chol_upper(Matrix_t *const pSrc);
 extern enum mtxResultInfo mtx_chol_lower(Matrix_t *const pSrc);
 extern enum mtxResultInfo mtx_chol1(double *A, double *L, const int size);
 extern enum mtxResultInfo mtx_inv(Matrix_t *const pSrc, Matrix_t *const pDst);
+extern enum mtxResultInfo mtx_inv_lu(Matrix_t *const pSrc, Matrix_t *const pDst);
 extern enum mtxResultInfo mtx_add(Matrix_t *const pDst, Matrix_t const *const pSrc);
 extern enum mtxResultInfo mtx_sub(Matrix_t *const pDst, Matrix_t const *const pSrc);
 extern void mtx_mul_scalar(Matrix_t *const pSrc, const double scalar);
